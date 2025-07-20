@@ -2,12 +2,33 @@ import streamlit as st
 import streamlit_authenticator as stauth
 import yaml
 from yaml.loader import SafeLoader
+import os
+
+def ensure_config_file_exists():
+    """
+    Checks if config.yaml exists. If not, it creates it from Streamlit secrets.
+    This makes the app work both locally and when deployed.
+    """
+    # Check if the config file already exists (for local development)
+    if not os.path.exists('config.yaml'):
+        # If not, create it from Streamlit secrets (for deployment)
+        # This requires a secret named CONFIG_YAML in your Streamlit Cloud settings
+        if "CONFIG_YAML" in st.secrets:
+            with open('config.yaml', 'w') as file:
+                file.write(st.secrets["CONFIG_YAML"])
+        else:
+            # If the secret is not set, stop the app with an error
+            st.error("Authentication configuration (CONFIG_YAML) is missing from Streamlit secrets.")
+            st.stop()
 
 def handle_authentication():
     """
     Handles user authentication, login, and registration.
     Returns the authenticator object.
     """
+    # Ensure the config file is present before trying to open it
+    ensure_config_file_exists()
+
     with open('config.yaml') as file:
         config = yaml.load(file, Loader=SafeLoader)
 
