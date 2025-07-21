@@ -32,16 +32,24 @@ def ensure_credentials_file_exists():
 def get_calendar_service(username: str):
     """
     Authenticates with Google Calendar API using a web-based flow suitable for deployment.
+    Uses st.session_state to avoid re-authentication loops during a single session.
     """
     ensure_credentials_file_exists()
 
     creds = None
+    creds_session_key = f'{username}_creds'
     token_file = f'{username}_token.pickle'
 
-    if os.path.exists(token_file):
+    # 1. First, check if credentials are in the current session's memory
+    if creds_session_key in st.session_state:
+        creds = st.session_state[creds_session_key]
+
+    # 2. If not in memory, check for a saved token file (for returning users)
+    elif os.path.exists(token_file):
         with open(token_file, 'rb') as token:
             creds = pickle.load(token)
 
+    # 3. If the credentials are not valid (or don't exist), start the auth flow
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
@@ -66,9 +74,11 @@ def get_calendar_service(username: str):
                     # Exchange the code for a token
                     flow.fetch_token(code=auth_code)
                     creds = flow.credentials
-                    # Save the credentials for the next run
+                    # Save the credentials to the token file for future sessions
                     with open(token_file, 'wb') as token:
                         pickle.dump(creds, token)
+                    # ALSO save credentials to the session state to use immediately
+                    st.session_state[creds_session_key] = creds
                     # Clear the auth code from the input box and rerun to proceed
                     st.session_state[f"{username}_auth_code"] = ""
                     st.rerun()
@@ -79,6 +89,9 @@ def get_calendar_service(username: str):
                 # Stop the app execution until the user provides the code
                 st.stop()
     
+    # After a successful auth, save the creds to session state for this session
+    st.session_state[creds_session_key] = creds
+
     try:
         service = build('calendar', 'v3', credentials=creds)
         return service
