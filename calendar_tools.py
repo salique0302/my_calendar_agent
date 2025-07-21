@@ -47,11 +47,9 @@ def get_calendar_service(username: str):
             creds.refresh(Request())
         else:
             # This is the new web-based authentication flow
-            # It requires "Web application" type credentials from Google Cloud
             flow = Flow.from_client_secrets_file(
                 'credentials.json',
                 scopes=SCOPES,
-                # This must match one of the "Authorized redirect URIs" in your Google Cloud credential
                 redirect_uri='urn:ietf:wg:oauth:2.0:oob' 
             )
 
@@ -61,19 +59,26 @@ def get_calendar_service(username: str):
             st.markdown(f"**[Google Authorization Link]({auth_url})**")
             st.info("After authorizing, Google will give you a code. Please paste it below.")
 
-            auth_code = st.text_input("Enter the authorization code here:")
+            auth_code = st.text_input("Enter the authorization code here:", key=f"{username}_auth_code")
 
-            if not auth_code:
+            if auth_code:
+                try:
+                    # Exchange the code for a token
+                    flow.fetch_token(code=auth_code)
+                    creds = flow.credentials
+                    # Save the credentials for the next run
+                    with open(token_file, 'wb') as token:
+                        pickle.dump(creds, token)
+                    # Clear the auth code from the input box and rerun to proceed
+                    st.session_state[f"{username}_auth_code"] = ""
+                    st.rerun()
+                except Exception as e:
+                    st.error(f"Failed to fetch token: {e}")
+                    st.stop()
+            else:
                 # Stop the app execution until the user provides the code
                 st.stop()
-            
-            # Exchange the code for a token
-            flow.fetch_token(code=auth_code)
-            creds = flow.credentials
-        
-        with open(token_file, 'wb') as token:
-            pickle.dump(creds, token)
-
+    
     try:
         service = build('calendar', 'v3', credentials=creds)
         return service
