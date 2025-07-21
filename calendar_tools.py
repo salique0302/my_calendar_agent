@@ -52,6 +52,7 @@ def get_calendar_service(username: str):
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            st.session_state[creds_session_key] = creds # Update session state with refreshed creds
         else:
             # This is the new web-based authentication flow
             flow = Flow.from_client_secrets_file(
@@ -68,25 +69,28 @@ def get_calendar_service(username: str):
 
             auth_code = st.text_input("Enter the authorization code here:", key=f"{username}_auth_code")
 
-            if auth_code:
-                try:
-                    # Exchange the code for a token
-                    flow.fetch_token(code=auth_code)
-                    creds = flow.credentials
-                    # Save the credentials to the token file for future sessions
-                    with open(token_file, 'wb') as token:
-                        pickle.dump(creds, token)
-                    # ALSO save credentials to the session state to use immediately
-                    st.session_state[creds_session_key] = creds
-                    # Clear the auth code from the input box and rerun to proceed
-                    st.session_state[f"{username}_auth_code"] = ""
-                    st.rerun()
-                except Exception as e:
-                    st.error(f"Failed to fetch token: {e}")
-                    st.stop()
-            else:
-                # Stop the app execution until the user provides the code
-                st.stop()
+            # Use an explicit button to submit the code, preventing the loop
+            if st.button("Submit Authorization Code", key=f"{username}_submit_code"):
+                if auth_code:
+                    try:
+                        # Exchange the code for a token
+                        flow.fetch_token(code=auth_code)
+                        creds = flow.credentials
+                        # Save the credentials to the token file for future sessions
+                        with open(token_file, 'wb') as token:
+                            pickle.dump(creds, token)
+                        # ALSO save credentials to the session state to use immediately
+                        st.session_state[creds_session_key] = creds
+                        # Rerun to clear the auth UI and proceed with the original request
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Failed to fetch token: {e}")
+                        st.stop()
+                else:
+                    st.warning("Please enter the code before submitting.")
+            
+            # Stop the app execution until the user provides the code and clicks the button
+            st.stop()
     
     # After a successful auth, save the creds to session state for this session
     st.session_state[creds_session_key] = creds
