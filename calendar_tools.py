@@ -5,7 +5,6 @@ import streamlit as st
 import json
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-# IMPORTANT: We now import Flow, not InstalledAppFlow
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from langchain.tools import BaseTool
