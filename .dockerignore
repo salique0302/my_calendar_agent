@@ -1,0 +1,13 @@
+# Ignore the virtual environment
+venv/
+
+# Ignore secret files (we will mount them securely later)
+.env
+credentials.json
+config.yaml
+*.pickle
+
+# Ignore Git and cache files
+.git/
+.gitignore
+__pycache__/
