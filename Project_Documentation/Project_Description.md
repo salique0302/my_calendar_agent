@@ -97,12 +97,6 @@ The assistant assumes the user's time zone is **Asia/Kolkata (IST)** by default.
 
 ---
 
-## 📄 Additional Documentation
-
-📥 [Download Project Documentation (Word)](./Calendar_AI_Assistant_Documentation.docx)
-
----
-
 ## 📄 License
 
 Licensed under the **MIT License**.
