@@ -31,9 +31,9 @@ def main():
         st.title("📅 Calendar AI Assistant")
         st.write("I can help you manage your Google Calendar. Try asking me to schedule a meeting or list your upcoming events!")
 
-        if not os.path.exists('credentials.json'):
-            st.error("FATAL ERROR: `credentials.json` not found.")
-            return
+        # FIX: The redundant check for credentials.json has been removed.
+        # The logic to create this file from secrets is now correctly handled
+        # inside the calendar_tools.py file when a tool is actually used.
             
         try:
             llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash-latest", temperature=0)
