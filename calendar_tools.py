@@ -1,9 +1,12 @@
 import os
 import datetime
 import pickle
+import streamlit as st
+import json
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
+# IMPORTANT: We now import Flow, not InstalledAppFlow
+from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from langchain.tools import BaseTool
 from typing import Optional, Type, Union
@@ -11,14 +14,27 @@ from pydantic import BaseModel, Field
 from dateutil.parser import parse
 from zoneinfo import ZoneInfo
 
-# --- Google Calendar API Authentication (MODIFIED FOR MULTI-USER) ---
+# --- Google Calendar API Authentication (MODIFIED FOR DEPLOYMENT) ---
 SCOPES = ['https://www.googleapis.com/auth/calendar']
+
+def ensure_credentials_file_exists():
+    """
+    Checks if credentials.json exists. If not, it creates it from Streamlit secrets.
+    """
+    if not os.path.exists('credentials.json'):
+        if "GOOGLE_CREDENTIALS_JSON" in st.secrets:
+            with open('credentials.json', 'w') as file:
+                file.write(st.secrets["GOOGLE_CREDENTIALS_JSON"])
+        else:
+            st.error("Authentication configuration (GOOGLE_CREDENTIALS_JSON) is missing from Streamlit secrets.")
+            st.stop()
 
 def get_calendar_service(username: str):
     """
-    Authenticates with Google Calendar API for a specific user.
-    Uses a unique token file for each user (e.g., 'mdsalique_token.pickle').
+    Authenticates with Google Calendar API using a web-based flow suitable for deployment.
     """
+    ensure_credentials_file_exists()
+
     creds = None
     token_file = f'{username}_token.pickle'
 
@@ -30,16 +46,42 @@ def get_calendar_service(username: str):
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+            # This is the new web-based authentication flow
+            # It requires "Web application" type credentials from Google Cloud
+            flow = Flow.from_client_secrets_file(
+                'credentials.json',
+                scopes=SCOPES,
+                # This must match one of the "Authorized redirect URIs" in your Google Cloud credential
+                redirect_uri='urn:ietf:wg:oauth:2.0:oob' 
+            )
+
+            auth_url, _ = flow.authorization_url(prompt='consent')
+            
+            st.warning(f"Please authorize this app by visiting this URL:")
+            st.markdown(f"**[Google Authorization Link]({auth_url})**")
+            st.info("After authorizing, Google will give you a code. Please paste it below.")
+
+            auth_code = st.text_input("Enter the authorization code here:")
+
+            if not auth_code:
+                # Stop the app execution until the user provides the code
+                st.stop()
+            
+            # Exchange the code for a token
+            flow.fetch_token(code=auth_code)
+            creds = flow.credentials
         
         with open(token_file, 'wb') as token:
             pickle.dump(creds, token)
 
-    service = build('calendar', 'v3', credentials=creds)
-    return service
+    try:
+        service = build('calendar', 'v3', credentials=creds)
+        return service
+    except Exception as e:
+        st.error(f"Failed to build Google Calendar service: {e}")
+        return None
 
-# --- LangChain Tools (MODIFIED TO ACCEPT USERNAME) ---
+# --- LangChain Tools (No changes needed below this line) ---
 class CreateEventInput(BaseModel):
     summary: Union[str, dict] = Field(description="The title or summary of the event.")
     start_time: str = Field(description="The start time of the event in a standard date-time format.")
@@ -60,6 +102,9 @@ class CreateCalendarEventTool(BaseTool):
                 event_summary = summary
 
             service = get_calendar_service(self.username)
+            if service is None:
+                return "Could not connect to Google Calendar. Please complete the authorization steps."
+
             local_tz = ZoneInfo("Asia/Kolkata")
             
             naive_start_dt = parse(start_time, ignoretz=True)
@@ -94,6 +139,9 @@ class ListCalendarEventsTool(BaseTool):
     def _run(self, start_time: str, end_time: str):
         try:
             service = get_calendar_service(self.username)
+            if service is None:
+                return "Could not connect to Google Calendar. Please complete the authorization steps."
+                
             local_tz = ZoneInfo("Asia/Kolkata")
             
             naive_start_dt = parse(start_time, ignoretz=True)
